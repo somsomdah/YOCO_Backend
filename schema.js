@@ -5,6 +5,7 @@ var UserSchema = new mongoose.Schema({
     user_password: {type: String, required: true},
     renting:{type:Boolean,default:false},
     current_rent_id:{type:String},
+    current_car_id:{type:String},
     photos_state:{before:{type:Boolean,default:false}, after:{type:Boolean,default:false,_id:false,}}
 });
 

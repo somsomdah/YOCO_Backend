@@ -1,3 +1,4 @@
+
 const pythonshell = require('python-shell')
 const fs = require('fs')
 var multipart = require('multiparty');
@@ -79,7 +80,7 @@ var findRentHistory = function (req, res) {
 
 	if (database.db) {
 
-		database.RentHistoryModel.find({ user_id: user_id }, 'rent_id car_id rent_date return_date returned', function (err, results) {
+		database.RentHistoryModel.find({ "user_id": user_id }, 'rent_id car_id rent_date return_date returned', function (err, results) {
 
 			if (err) {
 				console.log("findRentHistory : error")
@@ -87,11 +88,11 @@ var findRentHistory = function (req, res) {
 			}
 
 			if (results.length > 0) {
-				console.log('rent history found');
+				console.log('findRentHistory :rent history found');
 				res.send({ "result": true, "history": results })
 
 			} else {
-				console.log('no rent history');
+				console.log('findRentHistory :no rent history');
 				res.send({ "result": false })
 			}
 		})
@@ -138,7 +139,7 @@ var addRentHistory = function (req, res) {
 								console.dir("rent history added : " + rent_id);
 								res.send({ "result": true, "rent_id": rent_id })
 								database.UserModel.findOneAndUpdate({ "user_id": user_id },
-									{ $set: { 'renting': true, "current_rent_id": rent_id } },
+									{ $set: { 'renting': true, "current_rent_id": rent_id, "current_car_id": car_id } },
 									() => {
 										console.log("addRentHistory : user " + user_id + " starts renting a car")
 									})
@@ -148,22 +149,24 @@ var addRentHistory = function (req, res) {
 									() => {
 										console.log("addRentHistory : car " + car_id + " on rent")
 									})
-
+									
 							} else {
-								console.dir("rent history not added")
+								console.dir("addRentHistory :rent history not added")
 								res.send({ "result": false, "renting": false })
 							}
 						})
 					} else {
+						console.dir("addRentHistory : already renting a car")
 						res.send({ "result": false, "renting": true })
 					}
 				} else {
+					console.dir("addRentHistory : user not found")
 					res.send({ "result": false })
 				}
 			})
 
 		} else {
-			console.log("database disconected")
+			console.log("addRentHistory : database disconected")
 			res.send({ "result": false })
 		}
 	})
@@ -173,71 +176,80 @@ var addRentHistory = function (req, res) {
 var runYoloPy = function (req, res) {
 
 	var database = req.app.get('database');
-	var rent_id = req.body.rent_id
-	var before_after = req.body.before_after
-
 	console.log(req.route)
-	console.log(req.body);
+
 
 	if (database.db) {
+		var form = new multipart.Form();
 
-		database.PhotoModel.find({ "rent_id": rent_id, "before_after": before_after }, function (err, results) {
+		form.parse(req, function (err, fields, files) {
+			console.log(files)
+			console.log(fields)
 
-			if (err) {
-				console.log("runYoloPy : " + err)
-				res.send({ result: false });
-			} else if (results.length > 0) {
+			var rent_id = fields.rent_id[0]
+			var before_after = fields.before_after[0]
 
-				function runyolo(part,timeout) {
-					return new Promise(resolve =>
-						setTimeout(() => {
+			database.PhotoModel.find({ "rent_id": rent_id, "before_after": before_after }, function (err, results) {
 
-							var extention = "jpg";
-							var filename = rent_id + "_" + part + '_' + before_after + '.' + extention
-							var options = { mode: 'text', pythonPath: "", pythonOptions: ['-W ignore'], scriptPath: '', args: [before_after, filename] };
+				if (err) {
+					console.log("runYoloPy : " + err)
+					res.send({ result: false });
+				} else if (results.length > 0) {
 
-							pythonshell.PythonShell.run('yolo.py', options, function (err, results) {
-								if (err) {
-									console.log("runYoloPy : " + err);
-								}
+					function runyolo(part, timeout) {
+						return new Promise(resolve =>
+							setTimeout(() => {
 
-								console.log("runYoloPy : python process running ...")
+								var extention = "jpg";
+								var filename = rent_id + "_" + part + '_' + before_after + '.' + extention
+								var options = { mode: 'text', pythonPath: "", pythonOptions: ['-W ignore'], scriptPath: '', args: [before_after, filename] };
 
-								var resultpath = './results/yolo/' + filename.split('.').slice(0)[0] + '.json';
-						
-								let rawdata = fs.readFileSync(resultpath);
-								let yoloresult = JSON.parse(rawdata);
+								pythonshell.PythonShell.run('yolo.py', options, function (err, results) {
+									if (err) {
+										console.log("runYoloPy : " + err);
+									}
 
-								database.PhotoModel.findOneAndUpdate({ "rent_id": rent_id, "before_after": before_after, "part": part },
-									{ $set: { 'defects': yoloresult.predictions } },
-									() => {
-										console.log("runYoloPy : yolo result saved in database")
-									})
+									console.log("runYoloPy : python process running ...")
 
-							});
-							resolve();
-						}, timeout));
-				}
+									var resultpath = './results/yolo/' + filename.split('.').slice(0)[0] + '.json';
 
-				async function loop() {
-					
-					for (part of ['ff', 'ft', 'bf', 'bt', 'lf', 'lb', 'rf', 'rb']) {
-						if (part=='ff'){
-							await runyolo(part,10);
-						}else{
-							await (runyolo(part,18000))
-						}
+									let rawdata = fs.readFileSync(resultpath);
+									let yoloresult = JSON.parse(rawdata);
+
+									database.PhotoModel.findOneAndUpdate({ "rent_id": rent_id, "before_after": before_after, "part": part },
+										{ $set: { 'defects': yoloresult.predictions } },
+										() => {
+											console.log("runYoloPy : yolo result saved in database")
+										})
+
+								});
+								resolve();
+							}, timeout));
 					}
-					await res.send({ "result": true })
-					await console.log("runYoloPy : yolo process completed")
-				}
-				loop();
 
-			} else {
-				console.log("runYoloPy : photos not found")
-				res.send({ result: false });
-			}
+					async function loop() {
+
+						for (part of ['ff', 'ft', 'bf', 'bt', 'lf', 'lb', 'rf', 'rb']) {
+							if (part == 'ff') {
+								await runyolo(part, 10);
+							} else {
+								await (runyolo(part, 18000))
+							}
+						}
+
+						await sleep("runYoloPy : yolo process completed", 18000)
+						await res.send({ "result": true })
+
+					}
+					loop();
+
+				} else {
+					console.log("runYoloPy : photos not found")
+					res.send({ result: false });
+				}
+			})
 		})
+
 	} else {
 		console.log("database disconected")
 		res.send({ result: false });
@@ -269,12 +281,13 @@ var runComparePy = function (req, res) {
 					return new Promise(resolve =>
 						setTimeout(() => {
 							var options = { mode: 'text', pythonPath: '', pythonOptions: ['-W ignore'], scriptPath: '', args: [rent_id, part] };
-
+							//console.log(rent_id)
+							//console.log(part)
 							pythonshell.PythonShell.run('compare.py', options, function (err, results) {
 								if (err) {
 									console.log("runComparePy : " + err);
 								}
-								console.log("runComparePy :" + part + " : python process running ...")
+								console.log("runComparePy : " + part + " : python process running ...")
 								var resultpath = './results/compare/' + rent_id + "_" + part + '.json';
 								let rawdata = fs.readFileSync(resultpath);
 								let compareresult = JSON.parse(rawdata);
@@ -287,7 +300,7 @@ var runComparePy = function (req, res) {
 
 							});
 							resolve();
-						}, 10));
+						}, 100));
 				}
 
 
@@ -296,8 +309,9 @@ var runComparePy = function (req, res) {
 					for (part of ['ff', 'ft', 'bf', 'bt', 'lf', 'lb', 'rf', 'rb']) {
 						await runcompare(part);
 					}
+					await sleep("runComparePy : compare process completed", 100)
 					await res.send({ "result": true })
-					await console.log("runComparePy : compare process completed")
+
 				}
 
 				loop();
@@ -395,7 +409,7 @@ var updateRentHistory = function (req, res) {
 					res.send({ result: true })
 				})
 			database.UserModel.findOneAndUpdate({ "user_id": user_id },
-				{ $set: { 'renting': false, "current_rent_id": null, "photos_state": { "before": false, "after": false } } },
+				{ $set: { 'renting': false, "current_rent_id": null, "current_car_id": null, "photos_state": { "before": false, "after": false } } },
 				() => {
 					console.log("updateRentHistory : user " + user_id + " returnes a car")
 				})
@@ -423,13 +437,13 @@ var findUserInfo = function (req, res) {
 	console.log(req.body);
 
 	if (database.db) {
-		database.UserModel.find({ "user_id": user_id }, function (err, results) {
+		database.UserModel.find({ "user_id": user_id },'renting current_rent_id current_car_id photos_state', function (err, results) {
 			if (results.length == 1) {
 				console.log("findUserInfo : user found")
-				res.send({ "results": true, "user_info": results[0] })
+				res.send({ "result": true, "user_info": results[0] })
 			} else {
 				console.log("findUserInfo : user not found")
-				res.send({ "results": false })
+				res.send({ "result": false })
 			}
 		})
 	}
@@ -438,12 +452,12 @@ var findUserInfo = function (req, res) {
 
 var upload = function (req, res) {
 
-	var database=req.app.get('database')
+	var database = req.app.get('database')
 	console.log(req.route)
-	//console.log(req.body)
-	//console.log(req.files)
-	if(database.db){
+
+	if (database.db) {
 		var form = new multipart.Form();
+
 		form.parse(req, function (err, fields, files) {
 			console.log(files)
 
@@ -452,21 +466,21 @@ var upload = function (req, res) {
 					setTimeout(() => {
 
 						fs.readFile(file.path, function (err, data) {
-							if (err) {console.log("upload : "+err)}
+							if (err) { console.log("upload : " + err) }
 							fs.writeFile('./photos/' + file.originalFilename, data, function (err) {
 								if (err) throw err;
 								console.log('upload : File saved. ' + file.originalFilename)
 							});
 						});
-	
+
 						var extension = path.extname(file.originalFilename);
 						var basename = path.basename(file.originalFilename, extension);
-	
+
 						var rent_id = basename.split('_')[0]
 						var part = basename.split('_')[1]
 						var before_after = basename.split('_')[2]
 						var photo_id = rent_id + part + before_after
-	
+
 						var newPhoto = new database.PhotoModel({
 							"photo_id": photo_id,
 							"rent_id": rent_id,
@@ -474,6 +488,7 @@ var upload = function (req, res) {
 							"part": part,
 							"before_after": before_after
 						})
+
 						newPhoto.save(function (err) {
 							if (err) {
 								console.log("upload : " + err);
@@ -481,27 +496,44 @@ var upload = function (req, res) {
 								console.log("upload : photo saved : ./photos/" + file.originalFilename)
 							}
 						})
+
+						if (part == "ff") {
+
+							if (before_after == 'b') {
+								database.UserModel.findOneAndUpdate({ "current_rent_id": rent_id },
+									{ $set: { "photos_state.before": true} },()=>{
+										console.log("upload : before photos uploaded,user info changed")
+									})
+							}
+							if (before_after == 'a') {
+								database.UserModel.findOneAndUpdate({ "current_rent_id": rent_id },
+									{ $set: { "photos_state.after": true } },()=>{
+										console.log("upload : after photos uploaded, user info changed")
+									})
+							}
+						}
+
 						resolve();
 					}, 100));
 			}
-	
+
 			async function loop() {
 				for (key of ['image0', 'image1', 'image2', 'image3', 'image4', 'image5', 'image6', 'image7']) {
 					await saveimg(files[key][0])
-					//await console.log(files[key][0].path)
-	
 				}
+				await sleep("upload : upload process completed", 100)
 				await res.send({ "result": true })
 			}
-	
+
 			loop();
-	
-	
+
+
+
 		});
 
-	
-	}else{
-		res.send({"result:":false})
+
+	} else {
+		res.send({ "result:": false })
 		console.log("database disconnected")
 	}
 
@@ -509,7 +541,14 @@ var upload = function (req, res) {
 
 }
 
-
+function sleep(log, sec) {
+	return new Promise(function (resolve, reject) {
+		setTimeout(function () {
+			console.log(log);
+			resolve();
+		}, sec);
+	});
+}
 Date.prototype.format = function (f) {
 	String.prototype.string = function (len) { var s = '', i = 0; while (i++ < len) { s += this; } return s; };
 	String.prototype.zf = function (len) { return "0".string(len - this.length) + this; };
