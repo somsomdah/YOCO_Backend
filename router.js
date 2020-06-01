@@ -1,4 +1,3 @@
-
 const pythonshell = require('python-shell')
 const fs = require('fs')
 var multipart = require('multiparty');
@@ -178,16 +177,16 @@ var runYoloPy = function (req, res) {
 	var database = req.app.get('database');
 	console.log(req.route)
 
-
 	if (database.db) {
 		var form = new multipart.Form();
-
 		form.parse(req, function (err, fields, files) {
 			console.log(files)
 			console.log(fields)
 
 			var rent_id = fields.rent_id[0]
 			var before_after = fields.before_after[0]
+			const pythonshell = require('python-shell')
+			const fs = require('fs')
 
 			database.PhotoModel.find({ "rent_id": rent_id, "before_after": before_after }, function (err, results) {
 
@@ -195,6 +194,15 @@ var runYoloPy = function (req, res) {
 					console.log("runYoloPy : " + err)
 					res.send({ result: false });
 				} else if (results.length > 0) {
+
+					function sleep(log, sec) {
+						return new Promise(function (resolve, reject) {
+							setTimeout(function () {
+								console.log(log);
+								resolve();
+							}, sec);
+						});
+					}
 
 					function runyolo(part, timeout) {
 						return new Promise(resolve =>
@@ -237,7 +245,7 @@ var runYoloPy = function (req, res) {
 							}
 						}
 
-						await sleep("runYoloPy : yolo process completed", 18000)
+						await sleep("runYoloPy : yolo process completed : "+new Date().toString(), 50000)
 						await res.send({ "result": true })
 
 					}
@@ -248,12 +256,12 @@ var runYoloPy = function (req, res) {
 					res.send({ result: false });
 				}
 			})
-		})
-
-	} else {
+		}) 
+	}else {
 		console.log("database disconected")
 		res.send({ result: false });
 	}
+
 
 }
 
@@ -276,6 +284,8 @@ var runComparePy = function (req, res) {
 			}
 
 			else if (results.length > 0) {
+
+				
 
 				function runcompare(part) {
 					return new Promise(resolve =>
@@ -309,7 +319,7 @@ var runComparePy = function (req, res) {
 					for (part of ['ff', 'ft', 'bf', 'bt', 'lf', 'lb', 'rf', 'rb']) {
 						await runcompare(part);
 					}
-					await sleep("runComparePy : compare process completed", 100)
+					await sleep("runComparePy : compare process completed", 2000)
 					await res.send({ "result": true })
 
 				}
@@ -457,7 +467,6 @@ var upload = function (req, res) {
 
 	if (database.db) {
 		var form = new multipart.Form();
-
 		form.parse(req, function (err, fields, files) {
 			console.log(files)
 
